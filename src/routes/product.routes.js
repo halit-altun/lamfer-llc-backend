@@ -8,13 +8,7 @@ router.get("/", getProductsHandler);
 
 router.post(
   "/",
-  upload.fields([
-    { name: "heroImage", maxCount: 1 },
-    { name: "videoPoster", maxCount: 1 },
-    { name: "videoFile", maxCount: 1 },
-    { name: "setupImages", maxCount: 20 },
-    { name: "galleryImages", maxCount: 20 },
-  ]),
+  upload.any(),
   createProductHandler
 );
 

@@ -24,11 +24,86 @@ function splitTextToArray(value) {
     .filter(Boolean);
 }
 
+function getFileByField(files, fieldName) {
+  if (!Array.isArray(files)) {
+    return null;
+  }
+
+  return files.find((file) => file.fieldname === fieldName) ?? null;
+}
+
+function getFilesByField(files, fieldName) {
+  if (!Array.isArray(files)) {
+    return [];
+  }
+
+  return files.filter((file) => file.fieldname === fieldName);
+}
+
+function buildAPlusModuleFileMap(files) {
+  const fileMap = new Map();
+
+  (files || []).forEach((file) => {
+    const match = file.fieldname.match(/^aPlusModuleImages\[([^\]]+)\]\[([^\]]+)\]$/);
+    if (match) {
+      fileMap.set(`${match[1]}:${match[2]}`, file);
+    }
+  });
+
+  return fileMap;
+}
+
+async function buildAPlusModules(aPlusModulesRaw, files, folder) {
+  if (!Array.isArray(aPlusModulesRaw) || aPlusModulesRaw.length === 0) {
+    return [];
+  }
+
+  const fileMap = buildAPlusModuleFileMap(files);
+  const results = [];
+
+  for (const module of aPlusModulesRaw) {
+    const slots = [];
+
+    for (const slot of module.slots || []) {
+      if (!slot.hasFile) {
+        continue;
+      }
+
+      const uploadFile = fileMap.get(`${module.instanceId}:${slot.slotKey}`);
+      if (!uploadFile) {
+        continue;
+      }
+
+      const imageUrl = await uploadSingleFile(uploadFile, folder, "image");
+      if (imageUrl) {
+        slots.push({
+          slotKey: slot.slotKey,
+          imageUrl,
+        });
+      }
+    }
+
+    results.push({
+      order: module.order,
+      instanceId: module.instanceId,
+      moduleId: module.moduleId,
+      mergeWithNext: Boolean(module.mergeWithNext),
+      slots,
+    });
+  }
+
+  return results;
+}
+
 async function createProductHandler(req, res, next) {
   try {
     const {
       sellerId,
       productName,
+      sku,
+      tagline,
+      categoryId,
+      basePrice,
       heroEyebrow,
       heroTitle,
       heroDescription,
@@ -36,6 +111,7 @@ async function createProductHandler(req, res, next) {
       videoTitle,
       videoDescription,
       setupSteps,
+      aPlusModules,
     } = req.body;
 
     if (!sellerId || !productName || !heroTitle || !heroDescription) {
@@ -43,11 +119,14 @@ async function createProductHandler(req, res, next) {
     }
 
     const folder = `lamfer/products/${sellerId}`;
-    const heroImageUrl = await uploadSingleFile(req.files?.heroImage?.[0], folder, "image");
-    const videoPosterUrl = await uploadSingleFile(req.files?.videoPoster?.[0], folder, "image");
-    const videoUrl = await uploadSingleFile(req.files?.videoFile?.[0], folder, "video");
-    const galleryImageUrls = await uploadMultipleFiles(req.files?.galleryImages, folder);
-    const setupImageUrls = await uploadMultipleFiles(req.files?.setupImages, folder);
+    const uploadedFiles = req.files;
+    const heroImageUrl = await uploadSingleFile(getFileByField(uploadedFiles, "heroImage"), folder, "image");
+    const videoPosterUrl = await uploadSingleFile(getFileByField(uploadedFiles, "videoPoster"), folder, "image");
+    const videoUrl = await uploadSingleFile(getFileByField(uploadedFiles, "videoFile"), folder, "video");
+    const galleryImageUrls = await uploadMultipleFiles(getFilesByField(uploadedFiles, "galleryImages"), folder);
+    const setupImageUrls = await uploadMultipleFiles(getFilesByField(uploadedFiles, "setupImages"), folder);
+    const parsedAPlusModules = parseJsonField(aPlusModules, []);
+    const normalizedAPlusModules = await buildAPlusModules(parsedAPlusModules, uploadedFiles, folder);
 
     const parsedSetupSteps = parseJsonField(setupSteps, []);
     const normalizedSetupSteps = parsedSetupSteps.map((step, index) => ({
@@ -60,6 +139,10 @@ async function createProductHandler(req, res, next) {
     const payload = {
       sellerId,
       productName,
+      sku: sku || undefined,
+      tagline: tagline || undefined,
+      categoryId: categoryId || undefined,
+      basePrice: basePrice ? Number(basePrice) : undefined,
       heroEyebrow: heroEyebrow || "ENGINEERED FOR THE ELITE",
       heroTitle,
       heroDescription,
@@ -71,6 +154,7 @@ async function createProductHandler(req, res, next) {
       videoPosterUrl,
       setupSteps: normalizedSetupSteps.filter((step) => step.imageUrl),
       galleryImageUrls,
+      aPlusModules: normalizedAPlusModules,
     };
 
     const created = await createProduct(payload);
