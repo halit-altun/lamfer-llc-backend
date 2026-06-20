@@ -33,6 +33,7 @@ const aPlusModuleSchema = new mongoose.Schema(
     order: { type: Number, required: true },
     instanceId: { type: String, required: true, trim: true },
     moduleId: { type: String, required: true, trim: true },
+    title: { type: String, trim: true },
     mergeWithNext: { type: Boolean, default: false },
     slots: [aPlusModuleSlotSchema],
   },
@@ -42,6 +43,8 @@ const aPlusModuleSchema = new mongoose.Schema(
 const productSchema = new mongoose.Schema(
   {
     sellerId: { type: String, required: true, index: true },
+    publicId: { type: Number, unique: true, sparse: true, index: true },
+    brandSlug: { type: String, trim: true, default: "lamfer" },
     productName: { type: String, required: true, trim: true },
     sku: { type: String, trim: true },
     tagline: { type: String, trim: true },
@@ -56,7 +59,15 @@ const productSchema = new mongoose.Schema(
     videoDescription: { type: String, trim: true },
     videoUrl: { type: String, trim: true },
     videoPosterUrl: { type: String, trim: true },
+    videoPosterMode: { type: String, trim: true, default: "main" },
+    watchInActionEnabled: { type: Boolean, default: false },
+    watchInActionVideoUrl: { type: String, trim: true },
+    watchInActionPosterUrl: { type: String, trim: true },
+    watchInActionPosterMode: { type: String, trim: true, default: "main" },
     setupSteps: [setupStepSchema],
+    setupStepsEyebrow: { type: String, trim: true },
+    setupStepsTitle: { type: String, trim: true },
+    setupStepsHeadingMode: { type: String, trim: true, default: "default" },
     galleryImageUrls: [{ type: String, trim: true }],
     aPlusModules: [aPlusModuleSchema],
     architectureTitle: { type: String, trim: true, default: "Aerospace Architecture" },
@@ -65,9 +76,30 @@ const productSchema = new mongoose.Schema(
     amazonReviewTitle: { type: String, trim: true },
     amazonStoreUrl: { type: String, trim: true },
     amazonIncentiveCopy: { type: String, trim: true },
+    amazonReviewTargetStars: { type: Number, min: 1, max: 5, default: 5 },
+    amazonReviewRoutingEnabled: { type: Boolean, default: false },
+    marketplaceLinks: [
+      {
+        marketplaceId: { type: String, required: true, trim: true },
+        url: { type: String, required: true, trim: true },
+      },
+    ],
+    sellerNotificationEmail: { type: String, trim: true },
+    darkLandingBgPaletteId: { type: String, trim: true, default: "dark-charcoal" },
+    lightLandingBgPaletteId: { type: String, trim: true, default: "light-snow" },
     isPublished: { type: Boolean, default: false },
   },
   { timestamps: true }
+);
+
+productSchema.index(
+  { sellerId: 1, sku: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      sku: { $type: "string", $gt: "" },
+    },
+  }
 );
 
 const Product = mongoose.model("Product", productSchema);

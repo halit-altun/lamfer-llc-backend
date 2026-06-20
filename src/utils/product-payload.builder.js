@@ -1,4 +1,30 @@
 const { uploadSingleFile, uploadMultipleFiles } = require("../services/cloudinary-upload.service");
+const { parsePosterMode } = require("./video-poster.utils");
+
+const MAX_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024;
+
+function assertVideoFileSize(file, fieldLabel) {
+  if (file && file.size > MAX_VIDEO_FILE_SIZE_BYTES) {
+    const error = new Error(`${fieldLabel} must not exceed 30 MB`);
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function validateVideoUploads(files) {
+  if (!Array.isArray(files)) {
+    return;
+  }
+
+  for (const file of files) {
+    if (file.fieldname === "videoFile") {
+      assertVideoFileSize(file, "Installation video");
+    }
+    if (file.fieldname === "watchInActionVideoFile") {
+      assertVideoFileSize(file, "Watch in Action video");
+    }
+  }
+}
 
 function parseJsonField(value, fallback = []) {
   if (!value) {
@@ -10,6 +36,10 @@ function parseJsonField(value, fallback = []) {
   } catch {
     return fallback;
   }
+}
+
+function parseSetupStepsHeadingMode(value, fallback = "default") {
+  return value === "custom" ? "custom" : fallback === "custom" ? "custom" : "default";
 }
 
 function splitTextToArray(value) {
@@ -58,8 +88,26 @@ function parseOptionalString(value) {
   return trimmed || undefined;
 }
 
+function resolveNonEmptyString(value, fallback) {
+  const parsed = parseOptionalString(value);
+  return parsed ?? fallback;
+}
+
 function parseBoolean(value) {
   return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function parseStarRating(value, fallback = 5) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(5, Math.max(1, Math.round(parsed)));
 }
 
 function buildAPlusModuleFileMap(files) {
@@ -115,6 +163,7 @@ async function buildAPlusModules(aPlusModulesRaw, files, folder) {
       order: module.order,
       instanceId: module.instanceId,
       moduleId: module.moduleId,
+      title: parseOptionalString(module.title),
       mergeWithNext: Boolean(module.mergeWithNext),
       slots,
     });
@@ -138,7 +187,14 @@ async function buildProductPayload(body, files, existingProduct = null) {
     videoTitle,
     videoDescription,
     videoUrl: videoUrlFromBody,
+    videoPosterMode,
+    watchInActionEnabled,
+    watchInActionVideoUrl: watchInActionVideoUrlFromBody,
+    watchInActionPosterMode,
     architectureTitle,
+    setupStepsEyebrow,
+    setupStepsTitle,
+    setupStepsHeadingMode,
     featureCards,
     setupSteps,
     aPlusModules,
@@ -146,11 +202,20 @@ async function buildProductPayload(body, files, existingProduct = null) {
     amazonReviewTitle,
     amazonStoreUrl,
     amazonIncentiveCopy,
+    amazonReviewTargetStars,
+    amazonReviewRoutingEnabled,
+    marketplaceLinks,
+    sellerNotificationEmail,
+    darkLandingBgPaletteId,
+    lightLandingBgPaletteId,
     clearHeroImage,
+    clearVideo,
+    clearWatchInActionVideo,
   } = body;
 
   const folder = `lamfer/products/${sellerId || existingProduct?.sellerId || "unknown"}`;
   const uploadedFiles = files || [];
+  validateVideoUploads(uploadedFiles);
 
   const uploadedHeroImageUrl = await uploadSingleFile(
     getFileByField(uploadedFiles, "heroImage"),
@@ -168,8 +233,18 @@ async function buildProductPayload(body, files, existingProduct = null) {
     folder,
     "image"
   );
+  const uploadedWatchInActionPosterUrl = await uploadSingleFile(
+    getFileByField(uploadedFiles, "watchInActionPoster"),
+    folder,
+    "image"
+  );
   const uploadedVideoUrl = await uploadSingleFile(
     getFileByField(uploadedFiles, "videoFile"),
+    folder,
+    "video"
+  );
+  const uploadedWatchInActionVideoUrl = await uploadSingleFile(
+    getFileByField(uploadedFiles, "watchInActionVideoFile"),
     folder,
     "video"
   );
@@ -228,20 +303,73 @@ async function buildProductPayload(body, files, existingProduct = null) {
       ? [...(existingProduct?.galleryImageUrls || []), ...newGalleryImageUrls]
       : existingProduct?.galleryImageUrls || [];
 
-  const resolvedVideoUrl =
-    uploadedVideoUrl || parseOptionalString(videoUrlFromBody) || existingProduct?.videoUrl;
-  const resolvedVideoPosterUrl =
-    uploadedVideoPosterUrl || heroImageUrl || existingProduct?.videoPosterUrl || undefined;
+  const resolvedVideoUrl = parseBoolean(clearVideo)
+    ? undefined
+    : uploadedVideoUrl ??
+      (videoUrlFromBody !== undefined
+        ? parseOptionalString(videoUrlFromBody)
+        : existingProduct?.videoUrl);
+  const hasVideo = Boolean(resolvedVideoUrl);
+
+  const resolvedWatchInActionVideoUrl = parseBoolean(clearWatchInActionVideo)
+    ? undefined
+    : uploadedWatchInActionVideoUrl ??
+      (watchInActionVideoUrlFromBody !== undefined
+        ? parseOptionalString(watchInActionVideoUrlFromBody)
+        : existingProduct?.watchInActionVideoUrl);
+
+  const videoPosterModeResolved = hasVideo
+    ? parsePosterMode(videoPosterMode, existingProduct?.videoPosterMode)
+    : "main";
+  const storedVideoPosterUrl =
+    hasVideo && videoPosterModeResolved === "upload"
+      ? uploadedVideoPosterUrl ?? existingProduct?.videoPosterUrl ?? undefined
+      : undefined;
+
+  const hasWatchInActionVideo = Boolean(resolvedWatchInActionVideoUrl);
+  const watchInActionPosterModeResolved = hasWatchInActionVideo
+    ? parsePosterMode(watchInActionPosterMode, existingProduct?.watchInActionPosterMode)
+    : "main";
+  const storedWatchInActionPosterUrl =
+    hasWatchInActionVideo && watchInActionPosterModeResolved === "upload"
+      ? uploadedWatchInActionPosterUrl ??
+        existingProduct?.watchInActionPosterUrl ??
+        undefined
+      : undefined;
+
+  const watchInActionEnabledResolved =
+    watchInActionEnabled !== undefined
+      ? parseBoolean(watchInActionEnabled)
+      : Boolean(existingProduct?.watchInActionEnabled);
 
   const amazonFieldsProvided =
     amazonEnabled !== undefined ||
     amazonReviewTitle !== undefined ||
     amazonStoreUrl !== undefined ||
-    amazonIncentiveCopy !== undefined;
+    amazonIncentiveCopy !== undefined ||
+    amazonReviewTargetStars !== undefined ||
+    amazonReviewRoutingEnabled !== undefined ||
+    sellerNotificationEmail !== undefined;
+
+  const parsedMarketplaceLinks = parseJsonField(marketplaceLinks, null);
+  const normalizedMarketplaceLinks = Array.isArray(parsedMarketplaceLinks)
+    ? parsedMarketplaceLinks
+        .filter((link) => link?.marketplaceId && link?.url?.trim())
+        .map((link) => ({
+          marketplaceId: String(link.marketplaceId).trim(),
+          url: String(link.url).trim(),
+        }))
+        .filter((link) => link.marketplaceId !== "amazon")
+    : existingProduct?.marketplaceLinks || [];
+
+  const setupStepsHeadingModeResolved =
+    setupStepsHeadingMode !== undefined
+      ? parseSetupStepsHeadingMode(setupStepsHeadingMode)
+      : parseSetupStepsHeadingMode(existingProduct?.setupStepsHeadingMode, "default");
 
   return {
     sellerId: sellerId || existingProduct?.sellerId,
-    productName: productName ?? existingProduct?.productName,
+    productName: resolveNonEmptyString(productName, existingProduct?.productName),
     sku: parseOptionalString(sku) ?? existingProduct?.sku,
     tagline: parseOptionalString(tagline) ?? existingProduct?.tagline,
     categoryId: categoryId || existingProduct?.categoryId,
@@ -252,22 +380,44 @@ async function buildProductPayload(body, files, existingProduct = null) {
       parseOptionalString(heroEyebrow) ||
       existingProduct?.heroEyebrow ||
       "ENGINEERED FOR THE ELITE",
-    heroTitle: heroTitle ?? existingProduct?.heroTitle,
-    heroDescription: heroDescription ?? existingProduct?.heroDescription,
+    heroTitle: resolveNonEmptyString(heroTitle, existingProduct?.heroTitle),
+    heroDescription: resolveNonEmptyString(heroDescription, existingProduct?.heroDescription),
     bulletPoints: bulletPoints !== undefined ? splitTextToArray(bulletPoints) : existingProduct?.bulletPoints || [],
     heroImageUrl,
-    videoTitle:
-      parseOptionalString(videoTitle) ||
-      existingProduct?.videoTitle ||
-      "VIDEO INSTALLATION GUIDE",
-    videoDescription:
-      parseOptionalString(videoDescription) ?? existingProduct?.videoDescription,
+    videoTitle: hasVideo
+      ? parseOptionalString(videoTitle) ||
+        existingProduct?.videoTitle ||
+        "VIDEO INSTALLATION GUIDE"
+      : videoTitle !== undefined
+        ? parseOptionalString(videoTitle)
+        : existingProduct?.videoTitle,
+    videoDescription: hasVideo
+      ? parseOptionalString(videoDescription) ?? existingProduct?.videoDescription
+      : videoDescription !== undefined
+        ? parseOptionalString(videoDescription)
+        : existingProduct?.videoDescription,
     videoUrl: resolvedVideoUrl,
-    videoPosterUrl: resolvedVideoPosterUrl,
+    videoPosterUrl: storedVideoPosterUrl,
+    videoPosterMode: hasVideo ? videoPosterModeResolved : "main",
+    watchInActionEnabled: watchInActionEnabledResolved,
+    watchInActionVideoUrl: resolvedWatchInActionVideoUrl,
+    watchInActionPosterUrl: storedWatchInActionPosterUrl,
+    watchInActionPosterMode: hasWatchInActionVideo ? watchInActionPosterModeResolved : "main",
     architectureTitle:
       parseOptionalString(architectureTitle) ??
       existingProduct?.architectureTitle ??
       "Aerospace Architecture",
+    setupStepsEyebrow:
+      setupStepsHeadingModeResolved === "custom"
+        ? parseOptionalString(setupStepsEyebrow) ??
+          existingProduct?.setupStepsEyebrow ??
+          undefined
+        : undefined,
+    setupStepsTitle:
+      setupStepsHeadingModeResolved === "custom"
+        ? parseOptionalString(setupStepsTitle) ?? existingProduct?.setupStepsTitle ?? undefined
+        : undefined,
+    setupStepsHeadingMode: setupStepsHeadingModeResolved,
     featureCards: normalizedFeatureCards,
     setupSteps: normalizedSetupSteps.filter((step) => step.imageUrl),
     galleryImageUrls,
@@ -280,10 +430,30 @@ async function buildProductPayload(body, files, existingProduct = null) {
     amazonStoreUrl: parseOptionalString(amazonStoreUrl) ?? existingProduct?.amazonStoreUrl,
     amazonIncentiveCopy:
       parseOptionalString(amazonIncentiveCopy) ?? existingProduct?.amazonIncentiveCopy,
+    amazonReviewTargetStars: amazonReviewTargetStars !== undefined
+      ? parseStarRating(amazonReviewTargetStars)
+      : (existingProduct?.amazonReviewTargetStars ?? 5),
+    amazonReviewRoutingEnabled: amazonReviewRoutingEnabled !== undefined
+      ? parseBoolean(amazonReviewRoutingEnabled)
+      : Boolean(existingProduct?.amazonReviewRoutingEnabled),
+    marketplaceLinks: normalizedMarketplaceLinks,
+    sellerNotificationEmail:
+      sellerNotificationEmail !== undefined
+        ? parseOptionalString(sellerNotificationEmail)
+        : existingProduct?.sellerNotificationEmail,
+    darkLandingBgPaletteId:
+      parseOptionalString(darkLandingBgPaletteId) ??
+      existingProduct?.darkLandingBgPaletteId ??
+      "dark-charcoal",
+    lightLandingBgPaletteId:
+      parseOptionalString(lightLandingBgPaletteId) ??
+      existingProduct?.lightLandingBgPaletteId ??
+      "light-snow",
   };
 }
 
 module.exports = {
   buildProductPayload,
   parseOptionalNumber,
+  parseOptionalString,
 };

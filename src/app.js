@@ -34,9 +34,16 @@ app.use((err, _req, res, _next) => {
   }
 
   if (err.code === 11000) {
+    const duplicateField = Object.keys(err.keyPattern || {})[1] || Object.keys(err.keyPattern || {})[0];
+    const message =
+      duplicateField === "sku"
+        ? "Bu SKU bu satıcı için zaten kullanılıyor."
+        : "Bu kayıt zaten mevcut (duplicate key).";
+
     return res.status(409).json({
       ok: false,
-      message: "Bu kayıt zaten mevcut (duplicate key).",
+      message,
+      code: duplicateField === "sku" ? "SKU_DUPLICATE" : "DUPLICATE_KEY",
     });
   }
 
