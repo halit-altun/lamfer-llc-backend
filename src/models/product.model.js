@@ -2,10 +2,20 @@ const mongoose = require("mongoose");
 
 const setupStepSchema = new mongoose.Schema(
   {
+    stepNumber: { type: String, trim: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
     tags: [{ type: String, trim: true }],
     imageUrl: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
+const featureCardSchema = new mongoose.Schema(
+  {
+    icon: { type: String, trim: true, default: "verified" },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, required: true, trim: true },
   },
   { _id: false }
 );
@@ -41,14 +51,21 @@ const productSchema = new mongoose.Schema(
     heroTitle: { type: String, required: true, trim: true },
     heroDescription: { type: String, required: true, trim: true },
     bulletPoints: [{ type: String, trim: true }],
-    heroImageUrl: { type: String, required: true, trim: true },
-    videoTitle: { type: String, required: true, trim: true },
-    videoDescription: { type: String, required: true, trim: true },
-    videoUrl: { type: String, required: true, trim: true },
-    videoPosterUrl: { type: String, required: true, trim: true },
+    heroImageUrl: { type: String, trim: true },
+    videoTitle: { type: String, trim: true },
+    videoDescription: { type: String, trim: true },
+    videoUrl: { type: String, trim: true },
+    videoPosterUrl: { type: String, trim: true },
     setupSteps: [setupStepSchema],
     galleryImageUrls: [{ type: String, trim: true }],
     aPlusModules: [aPlusModuleSchema],
+    architectureTitle: { type: String, trim: true, default: "Aerospace Architecture" },
+    featureCards: [featureCardSchema],
+    amazonEnabled: { type: Boolean, default: false },
+    amazonReviewTitle: { type: String, trim: true },
+    amazonStoreUrl: { type: String, trim: true },
+    amazonIncentiveCopy: { type: String, trim: true },
+    isPublished: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

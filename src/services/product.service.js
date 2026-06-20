@@ -13,8 +13,18 @@ async function getLatestProduct() {
   return Product.findOne().sort({ createdAt: -1 }).lean();
 }
 
+async function getProductById(id) {
+  return Product.findById(id).lean();
+}
+
+async function updateProductById(id, payload) {
+  return Product.findByIdAndUpdate(id, payload, { new: true, runValidators: true }).lean();
+}
+
 module.exports = {
   createProduct,
   getProductsBySellerId,
   getLatestProduct,
+  getProductById,
+  updateProductById,
 };
