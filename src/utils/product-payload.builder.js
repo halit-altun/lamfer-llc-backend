@@ -42,6 +42,10 @@ function parseSetupStepsHeadingMode(value, fallback = "default") {
   return value === "custom" ? "custom" : fallback === "custom" ? "custom" : "default";
 }
 
+function parseCareGuidelinesHeadingMode(value, fallback = "default") {
+  return value === "custom" ? "custom" : fallback === "custom" ? "custom" : "default";
+}
+
 function splitTextToArray(value) {
   if (!value) {
     return [];
@@ -196,6 +200,10 @@ async function buildProductPayload(body, files, existingProduct = null) {
     setupStepsTitle,
     setupStepsHeadingMode,
     featureCards,
+    careGuidelines,
+    careGuidelinesEyebrow,
+    careGuidelinesTitle,
+    careGuidelinesHeadingMode,
     setupSteps,
     aPlusModules,
     amazonEnabled,
@@ -208,6 +216,9 @@ async function buildProductPayload(body, files, existingProduct = null) {
     sellerNotificationEmail,
     darkLandingBgPaletteId,
     lightLandingBgPaletteId,
+    defaultLandingThemeMode,
+    brandStoreUrl,
+    mainPictureIncludeInHeader,
     clearHeroImage,
     clearVideo,
     clearWatchInActionVideo,
@@ -298,6 +309,17 @@ async function buildProductPayload(body, files, existingProduct = null) {
         }))
     : existingProduct?.featureCards || [];
 
+  const parsedCareGuidelines = parseJsonField(careGuidelines, null);
+  const normalizedCareGuidelines = Array.isArray(parsedCareGuidelines)
+    ? parsedCareGuidelines
+        .filter((item) => item?.title && item?.description)
+        .map((item) => ({
+          icon: String(item.icon || "warning").trim(),
+          title: String(item.title).trim(),
+          description: String(item.description).trim(),
+        }))
+    : existingProduct?.careGuidelines || [];
+
   const galleryImageUrls =
     newGalleryImageUrls.length > 0
       ? [...(existingProduct?.galleryImageUrls || []), ...newGalleryImageUrls]
@@ -367,6 +389,11 @@ async function buildProductPayload(body, files, existingProduct = null) {
       ? parseSetupStepsHeadingMode(setupStepsHeadingMode)
       : parseSetupStepsHeadingMode(existingProduct?.setupStepsHeadingMode, "default");
 
+  const careGuidelinesHeadingModeResolved =
+    careGuidelinesHeadingMode !== undefined
+      ? parseCareGuidelinesHeadingMode(careGuidelinesHeadingMode)
+      : parseCareGuidelinesHeadingMode(existingProduct?.careGuidelinesHeadingMode, "default");
+
   return {
     sellerId: sellerId || existingProduct?.sellerId,
     productName: resolveNonEmptyString(productName, existingProduct?.productName),
@@ -384,6 +411,10 @@ async function buildProductPayload(body, files, existingProduct = null) {
     heroDescription: resolveNonEmptyString(heroDescription, existingProduct?.heroDescription),
     bulletPoints: bulletPoints !== undefined ? splitTextToArray(bulletPoints) : existingProduct?.bulletPoints || [],
     heroImageUrl,
+    mainPictureIncludeInHeader:
+      mainPictureIncludeInHeader !== undefined
+        ? parseBoolean(mainPictureIncludeInHeader)
+        : existingProduct?.mainPictureIncludeInHeader ?? true,
     videoTitle: hasVideo
       ? parseOptionalString(videoTitle) ||
         existingProduct?.videoTitle ||
@@ -419,6 +450,18 @@ async function buildProductPayload(body, files, existingProduct = null) {
         : undefined,
     setupStepsHeadingMode: setupStepsHeadingModeResolved,
     featureCards: normalizedFeatureCards,
+    careGuidelines: normalizedCareGuidelines,
+    careGuidelinesEyebrow:
+      careGuidelinesHeadingModeResolved === "custom"
+        ? parseOptionalString(careGuidelinesEyebrow) ??
+          existingProduct?.careGuidelinesEyebrow ??
+          undefined
+        : undefined,
+    careGuidelinesTitle:
+      careGuidelinesHeadingModeResolved === "custom"
+        ? parseOptionalString(careGuidelinesTitle) ?? existingProduct?.careGuidelinesTitle ?? undefined
+        : undefined,
+    careGuidelinesHeadingMode: careGuidelinesHeadingModeResolved,
     setupSteps: normalizedSetupSteps.filter((step) => step.imageUrl),
     galleryImageUrls,
     aPlusModules: normalizedAPlusModules,
@@ -449,6 +492,14 @@ async function buildProductPayload(body, files, existingProduct = null) {
       parseOptionalString(lightLandingBgPaletteId) ??
       existingProduct?.lightLandingBgPaletteId ??
       "light-snow",
+    defaultLandingThemeMode:
+      defaultLandingThemeMode === "light" || defaultLandingThemeMode === "dark"
+        ? defaultLandingThemeMode
+        : existingProduct?.defaultLandingThemeMode ?? "dark",
+    brandStoreUrl:
+      brandStoreUrl !== undefined
+        ? parseOptionalString(brandStoreUrl)
+        : existingProduct?.brandStoreUrl,
   };
 }
 

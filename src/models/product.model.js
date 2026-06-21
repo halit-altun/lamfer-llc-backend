@@ -20,6 +20,15 @@ const featureCardSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const careGuidelineSchema = new mongoose.Schema(
+  {
+    icon: { type: String, trim: true, default: "warning" },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
 const aPlusModuleSlotSchema = new mongoose.Schema(
   {
     slotKey: { type: String, required: true, trim: true },
@@ -55,6 +64,7 @@ const productSchema = new mongoose.Schema(
     heroDescription: { type: String, required: true, trim: true },
     bulletPoints: [{ type: String, trim: true }],
     heroImageUrl: { type: String, trim: true },
+    mainPictureIncludeInHeader: { type: Boolean, default: true },
     videoTitle: { type: String, trim: true },
     videoDescription: { type: String, trim: true },
     videoUrl: { type: String, trim: true },
@@ -72,6 +82,10 @@ const productSchema = new mongoose.Schema(
     aPlusModules: [aPlusModuleSchema],
     architectureTitle: { type: String, trim: true, default: "Aerospace Architecture" },
     featureCards: [featureCardSchema],
+    careGuidelines: [careGuidelineSchema],
+    careGuidelinesEyebrow: { type: String, trim: true },
+    careGuidelinesTitle: { type: String, trim: true },
+    careGuidelinesHeadingMode: { type: String, trim: true, default: "default" },
     amazonEnabled: { type: Boolean, default: false },
     amazonReviewTitle: { type: String, trim: true },
     amazonStoreUrl: { type: String, trim: true },
@@ -87,6 +101,8 @@ const productSchema = new mongoose.Schema(
     sellerNotificationEmail: { type: String, trim: true },
     darkLandingBgPaletteId: { type: String, trim: true, default: "dark-charcoal" },
     lightLandingBgPaletteId: { type: String, trim: true, default: "light-snow" },
+    defaultLandingThemeMode: { type: String, trim: true, default: "dark", enum: ["dark", "light"] },
+    brandStoreUrl: { type: String, trim: true },
     isPublished: { type: Boolean, default: false },
   },
   { timestamps: true }
